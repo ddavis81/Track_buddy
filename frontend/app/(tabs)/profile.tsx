@@ -12,8 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Camera from 'expo-camera';
-import { CameraView } from 'expo-camera';
+import { Camera, CameraView, isCameraAvailable } from '../../components/Camera';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -53,6 +52,14 @@ export default function ProfileScreen() {
   };
 
   const openCamera = async () => {
+    if (!isCameraAvailable) {
+      Alert.alert(
+        'Camera Not Available',
+        'Camera access is only available on mobile devices (iOS/Android)'
+      );
+      return;
+    }
+    
     const hasPermission = await requestCameraPermission();
     if (hasPermission) {
       setCameraVisible(true);
