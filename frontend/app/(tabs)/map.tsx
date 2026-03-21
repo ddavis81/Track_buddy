@@ -7,14 +7,26 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  ScrollView,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useAuth } from '../../contexts/AuthContext';
 import axios from 'axios';
 import Constants from 'expo-constants';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
+// Conditionally import MapView only for native platforms
+let MapView: any = null;
+let Marker: any = null;
+let PROVIDER_GOOGLE: any = null;
+
+if (Platform.OS !== 'web') {
+  const MapModule = require('react-native-maps');
+  MapView = MapModule.default;
+  Marker = MapModule.Marker;
+  PROVIDER_GOOGLE = MapModule.PROVIDER_GOOGLE;
+}
 
 const BACKEND_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -180,6 +192,66 @@ export default function MapScreen() {
     );
   }
 
+  // Web fallback - show location info instead of map
+  if (Platform.OS === 'web' || !MapView) {
+    return (
+      <View style={styles.container}>
+        <SafeAreaView style={styles.topBar}>
+          <View style={styles.topBarContent}>
+            <Text style={styles.topBarTitle}>TrackSafe</Text>
+            <Text style={styles.topBarSubtitle}>
+              Tracking {connections.filter((c) => c.location).length} users
+            </Text>
+          </View>
+        </SafeAreaView>
+
+        <ScrollView style={styles.webFallback}>
+          <View style={styles.locationCard}>
+            <Ionicons name="location" size={32} color="#007AFF" />
+            <Text style={styles.locationTitle}>Your Location</Text>
+            <Text style={styles.locationCoords}>
+              Lat: {location.coords.latitude.toFixed(6)}
+            </Text>
+            <Text style={styles.locationCoords}>
+              Lng: {location.coords.longitude.toFixed(6)}
+            </Text>
+          </View>
+
+          {connections.map((conn) =>
+            conn.location ? (
+              <View key={conn.user.id} style={styles.userCard}>
+                <View style={styles.userAvatar}>
+                  <Ionicons name="person" size={24} color="#007AFF" />
+                </View>
+                <View style={styles.userInfo}>
+                  <Text style={styles.userName}>{conn.user.name}</Text>
+                  <Text style={styles.userCoords}>
+                    Lat: {conn.location.latitude.toFixed(6)}, Lng: {conn.location.longitude.toFixed(6)}
+                  </Text>
+                  <Text style={styles.userTime}>
+                    {new Date(conn.location.timestamp).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+            ) : null
+          )}
+
+          {connections.length === 0 && (
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={64} color="#666" />
+              <Text style={styles.emptyText}>No connections yet</Text>
+              <Text style={styles.emptySubtext}>Add connections to see their locations</Text>
+            </View>
+          )}
+        </ScrollView>
+
+        <TouchableOpacity style={styles.myLocationButton} onPress={centerOnMyLocation}>
+          <Ionicons name="refresh" size={24} color="#007AFF" />
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <MapView
@@ -316,5 +388,77 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 2,
     borderColor: '#007AFF',
+  },
+  webFallback: {
+    flex: 1,
+    padding: 16,
+  },
+  locationCard: {
+    backgroundColor: '#1C1C1E',
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  locationTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  locationCoords: {
+    fontSize: 14,
+    color: '#999',
+    marginBottom: 4,
+  },
+  userCard: {
+    flexDirection: 'row',
+    backgroundColor: '#1C1C1E',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  userAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2C2C2E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  userCoords: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 2,
+  },
+  userTime: {
+    fontSize: 11,
+    color: '#666',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 64,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#999',
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 8,
   },
 });
