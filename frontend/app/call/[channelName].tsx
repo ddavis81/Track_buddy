@@ -13,10 +13,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
   createAgoraRtcEngine,
-  IRtcEngine,
   ChannelProfileType,
   ClientRoleType,
-} from 'react-native-agora';
+  isAgoraAvailable,
+} from '../../components/AgoraEngine';
+import type { IRtcEngine } from '../../components/AgoraEngine';
 import axios from 'axios';
 import Constants from 'expo-constants';
 import { useAuth } from '../../contexts/AuthContext';
@@ -53,6 +54,16 @@ export default function VideoCallScreen() {
 
   const initializeCall = async () => {
     try {
+      // Check if Agora is available on this platform
+      if (!isAgoraAvailable) {
+        Alert.alert(
+          'Video Calls Not Available',
+          'Video calling is only available on mobile devices (iOS/Android)',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+        return;
+      }
+
       // Get Agora token from backend
       const response = await axios.post(
         `${BACKEND_URL}/api/agora/token`,

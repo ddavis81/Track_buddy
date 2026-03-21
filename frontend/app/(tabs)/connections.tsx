@@ -9,6 +9,7 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
@@ -150,21 +151,27 @@ export default function ConnectionsScreen() {
         )}
       </View>
       <View style={styles.connectionActions}>
-        <TouchableOpacity
-          style={styles.callButton}
-          onPress={() =>
-            router.push({
-              pathname: `/call/${item.user.id}`,
-              params: {
-                channelName: `call_${user?.id}_${item.user.id}`,
-                targetUserId: item.user.id,
-                targetUserName: item.user.name,
-              },
-            })
-          }
-        >
-          <Ionicons name="videocam" size={24} color="#fff" />
-        </TouchableOpacity>
+        {Platform.OS !== 'web' ? (
+          <TouchableOpacity
+            style={styles.callButton}
+            onPress={() =>
+              router.push({
+                pathname: `/call/${item.user.id}`,
+                params: {
+                  channelName: `call_${user?.id}_${item.user.id}`,
+                  targetUserId: item.user.id,
+                  targetUserName: item.user.name,
+                },
+              })
+            }
+          >
+            <Ionicons name="videocam" size={24} color="#fff" />
+          </TouchableOpacity>
+        ) : (
+          <View style={[styles.callButton, styles.callButtonDisabled]}>
+            <Ionicons name="videocam-off" size={24} color="#666" />
+          </View>
+        )}
         <Ionicons name="checkmark-circle" size={24} color="#34C759" />
       </View>
     </View>
@@ -390,6 +397,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  callButtonDisabled: {
+    backgroundColor: '#2C2C2E',
   },
   requestInfo: {
     flex: 1,
