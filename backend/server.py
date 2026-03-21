@@ -14,6 +14,8 @@ import bcrypt
 import jwt
 from bson import ObjectId
 import socketio
+from agora_token_builder import RtcTokenBuilder
+import time
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -430,6 +432,47 @@ async def delete_alarm(alarm_id: str, user_id: str = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Alarm not found")
     
     return {"message": "Alarm deleted"}
+
+# Agora endpoints
+class AgoraTokenRequest(BaseModel):
+    channel_name: str
+    uid: int = 0  # 0 means Agora will assign a random UID
+
+@api_router.post("/agora/token")
+async def generate_agora_token(request: AgoraTokenRequest, user_id: str = Depends(get_current_user)):
+    app_id = os.environ.get('AGORA_APP_ID')
+    app_certificate = os.environ.get('AGORA_APP_CERTIFICATE')
+    
+    if not app_id or not app_certificate:
+        raise HTTPException(status_code=500, detail="Agora credentials not configured")
+    
+    # Token expires in 1 hour
+    expiration_time_in_seconds = 3600
+    current_timestamp = int(time.time())
+    privilege_expired_ts = current_timestamp + expiration_time_in_seconds
+    
+    # Role: 1 = Publisher (can send and receive), 2 = Subscriber (receive only)
+    role = 1  # Publisher
+    
+    try:
+        token = RtcTokenBuilder.buildTokenWithUid(
+            app_id,
+            app_certificate,
+            request.channel_name,
+            request.uid,
+            role,
+            privilege_expired_ts
+        )
+        
+        return {
+            "token": token,
+            "app_id": app_id,
+            "channel_name": request.channel_name,
+            "uid": request.uid,
+            "expiration": privilege_expired_ts
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate token: {str(e)}")
 
 # Socket.IO events
 @sio.event

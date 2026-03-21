@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
+import { useRouter } from 'expo-router';
 import axios from 'axios';
 import Constants from 'expo-constants';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -43,7 +44,8 @@ interface PendingRequest {
 }
 
 export default function ConnectionsScreen() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const router = useRouter();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,7 +149,24 @@ export default function ConnectionsScreen() {
           </Text>
         )}
       </View>
-      <Ionicons name="checkmark-circle" size={24} color="#34C759" />
+      <View style={styles.connectionActions}>
+        <TouchableOpacity
+          style={styles.callButton}
+          onPress={() =>
+            router.push({
+              pathname: `/call/${item.user.id}`,
+              params: {
+                channelName: `call_${user?.id}_${item.user.id}`,
+                targetUserId: item.user.id,
+                targetUserName: item.user.name,
+              },
+            })
+          }
+        >
+          <Ionicons name="videocam" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Ionicons name="checkmark-circle" size={24} color="#34C759" />
+      </View>
     </View>
   );
 
@@ -358,6 +377,19 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 12,
     color: '#666',
+  },
+  connectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  callButton: {
+    backgroundColor: '#007AFF',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   requestInfo: {
     flex: 1,
