@@ -101,6 +101,15 @@ class Alarm(BaseModel):
     trigger_time: datetime
     created_at: datetime
 
+class SOSAlert(BaseModel):
+    id: str
+    user_id: str
+    latitude: float
+    longitude: float
+    message: Optional[str] = None
+    created_at: datetime
+    acknowledged: bool = False
+
 # Helper functions
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -432,6 +441,131 @@ async def delete_alarm(alarm_id: str, user_id: str = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Alarm not found")
     
     return {"message": "Alarm deleted"}
+
+# SOS endpoints
+class SOSRequest(BaseModel):
+    latitude: float
+    longitude: float
+    message: Optional[str] = None
+
+@api_router.post("/sos")
+async def send_sos_alert(sos_request: SOSRequest, user_id: str = Depends(get_current_user)):
+    # Get user info
+    user = await db.users.find_one({"_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Create SOS alert
+    sos_dict = {
+        "_id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "latitude": sos_request.latitude,
+        "longitude": sos_request.longitude,
+        "message": sos_request.message or "Emergency! Need help!",
+        "created_at": datetime.utcnow(),
+        "acknowledged": False
+    }
+    
+    await db.sos_alerts.insert_one(sos_dict)
+    
+    # Get all connected users
+    connections = await db.connections.find({
+        "$or": [
+            {"requester_id": user_id, "status": "accepted"},
+            {"target_id": user_id, "status": "accepted"}
+        ]
+    }).to_list(100)
+    
+    # Notify all connected users via Socket.IO
+    for conn in connections:
+        other_user_id = conn["target_id"] if conn["requester_id"] == user_id else conn["requester_id"]
+        
+        await sio.emit('sos_alert', {
+            "alert_id": sos_dict["_id"],
+            "user_id": user_id,
+            "user_name": user["name"],
+            "user_phone": user["phone_number"],
+            "latitude": sos_dict["latitude"],
+            "longitude": sos_dict["longitude"],
+            "message": sos_dict["message"],
+            "created_at": sos_dict["created_at"].isoformat()
+        }, room=other_user_id)
+    
+    return {
+        "message": "SOS alert sent successfully",
+        "id": sos_dict["_id"],
+        "notified_users": len(connections)
+    }
+
+@api_router.get("/sos")
+async def get_sos_alerts(user_id: str = Depends(get_current_user)):
+    # Get alerts from connected users
+    connections = await db.connections.find({
+        "$or": [
+            {"requester_id": user_id, "status": "accepted"},
+            {"target_id": user_id, "status": "accepted"}
+        ]
+    }).to_list(100)
+    
+    connected_user_ids = []
+    for conn in connections:
+        other_user_id = conn["target_id"] if conn["requester_id"] == user_id else conn["requester_id"]
+        connected_user_ids.append(other_user_id)
+    
+    # Get SOS alerts from connected users (last 24 hours)
+    one_day_ago = datetime.utcnow() - timedelta(days=1)
+    sos_alerts = await db.sos_alerts.find({
+        "user_id": {"$in": connected_user_ids},
+        "created_at": {"$gte": one_day_ago}
+    }).sort("created_at", -1).to_list(100)
+    
+    result = []
+    for alert in sos_alerts:
+        alert_user = await db.users.find_one({"_id": alert["user_id"]})
+        result.append({
+            "id": alert["_id"],
+            "user": {
+                "id": alert_user["_id"],
+                "name": alert_user["name"],
+                "phone_number": alert_user["phone_number"]
+            },
+            "latitude": alert["latitude"],
+            "longitude": alert["longitude"],
+            "message": alert["message"],
+            "created_at": alert["created_at"],
+            "acknowledged": alert["acknowledged"]
+        })
+    
+    return result
+
+@api_router.post("/sos/{alert_id}/acknowledge")
+async def acknowledge_sos(alert_id: str, user_id: str = Depends(get_current_user)):
+    result = await db.sos_alerts.update_one(
+        {"_id": alert_id},
+        {"$set": {"acknowledged": True}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="SOS alert not found")
+    
+    return {"message": "SOS alert acknowledged"}
+
+@api_router.get("/sos/my-alerts")
+async def get_my_sos_alerts(user_id: str = Depends(get_current_user)):
+    # Get user's own SOS alerts
+    alerts = await db.sos_alerts.find({"user_id": user_id}).sort("created_at", -1).to_list(50)
+    
+    return [
+        {
+            "id": alert["_id"],
+            "latitude": alert["latitude"],
+            "longitude": alert["longitude"],
+            "message": alert["message"],
+            "created_at": alert["created_at"],
+            "acknowledged": alert["acknowledged"]
+        }
+        for alert in alerts
+    ]
 
 # Agora endpoints
 class AgoraTokenRequest(BaseModel):

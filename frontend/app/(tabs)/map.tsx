@@ -40,6 +40,7 @@ export default function MapScreen() {
   const [locationPermission, setLocationPermission] = useState(false);
   const mapRef = useRef<MapView>(null);
   const locationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [sosPressed, setSosPressed] = useState(false);
 
   useEffect(() => {
     requestLocationPermission();
@@ -158,6 +159,53 @@ export default function MapScreen() {
         longitudeDelta: 0.01,
       });
     }
+  };
+
+  const sendSOSAlert = async () => {
+    if (!location) {
+      Alert.alert('Error', 'Location not available');
+      return;
+    }
+
+    Alert.alert(
+      '⚠️ Send SOS Alert?',
+      'This will immediately notify all your connections with your current location. Are you in an emergency?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send SOS',
+          style: 'destructive',
+          onPress: async () => {
+            setSosPressed(true);
+            try {
+              const response = await axios.post(
+                `${BACKEND_URL}/api/sos`,
+                {
+                  latitude: location.coords.latitude,
+                  longitude: location.coords.longitude,
+                  message: 'Emergency! I need help!',
+                },
+                {
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                }
+              );
+              
+              Alert.alert(
+                'SOS Alert Sent!',
+                `${response.data.notified_users} connection(s) have been notified of your emergency.`
+              );
+            } catch (error: any) {
+              console.error('Error sending SOS:', error);
+              Alert.alert('Error', 'Failed to send SOS alert');
+            } finally {
+              setSosPressed(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -285,6 +333,15 @@ export default function MapScreen() {
         </View>
       </SafeAreaView>
 
+      <TouchableOpacity
+        style={[styles.sosButton, sosPressed && styles.sosButtonPressed]}
+        onPress={sendSOSAlert}
+        disabled={sosPressed}
+      >
+        <Ionicons name="warning" size={32} color="#fff" />
+        <Text style={styles.sosButtonText}>SOS</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.myLocationButton} onPress={centerOnMyLocation}>
         <Ionicons name="navigate" size={24} color="#007AFF" />
       </TouchableOpacity>
@@ -370,6 +427,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
+  },
+  sosButton: {
+    position: 'absolute',
+    bottom: 32,
+    left: 16,
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    gap: 8,
+  },
+  sosButtonPressed: {
+    opacity: 0.7,
+  },
+  sosButtonText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   markerContainer: {
     backgroundColor: '#fff',
