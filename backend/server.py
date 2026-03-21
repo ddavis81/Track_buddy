@@ -326,18 +326,32 @@ async def get_pending_requests(user_id: str = Depends(get_current_user)):
         "status": "pending"
     }).to_list(100)
     
+    if not requests:
+        return []
+    
+    # Batch fetch all requester users to avoid N+1 queries
+    requester_ids = [req["requester_id"] for req in requests]
+    requesters = await db.users.find(
+        {"_id": {"$in": requester_ids}},
+        {"_id": 1, "name": 1, "phone_number": 1}
+    ).to_list(100)
+    
+    # Create lookup dictionary
+    requester_dict = {user["_id"]: user for user in requesters}
+    
     result = []
     for req in requests:
-        requester = await db.users.find_one({"_id": req["requester_id"]})
-        result.append({
-            "id": req["_id"],
-            "requester": {
-                "id": requester["_id"],
-                "name": requester["name"],
-                "phone_number": requester["phone_number"]
-            },
-            "created_at": req["created_at"]
-        })
+        requester = requester_dict.get(req["requester_id"])
+        if requester:
+            result.append({
+                "id": req["_id"],
+                "requester": {
+                    "id": requester["_id"],
+                    "name": requester["name"],
+                    "phone_number": requester["phone_number"]
+                },
+                "created_at": req["created_at"]
+            })
     
     return result
 
@@ -376,30 +390,56 @@ async def get_connections(user_id: str = Depends(get_current_user)):
         ]
     }).to_list(100)
     
+    if not connections:
+        return []
+    
+    # Collect all user IDs to batch fetch
+    user_ids = []
+    for conn in connections:
+        other_user_id = conn["target_id"] if conn["requester_id"] == user_id else conn["requester_id"]
+        user_ids.append(other_user_id)
+    
+    # Batch fetch all users
+    users = await db.users.find(
+        {"_id": {"$in": user_ids}},
+        {"_id": 1, "name": 1, "phone_number": 1}
+    ).to_list(100)
+    user_dict = {user["_id"]: user for user in users}
+    
+    # Batch fetch all latest locations
+    locations_cursor = db.locations.aggregate([
+        {"$match": {"user_id": {"$in": user_ids}}},
+        {"$sort": {"timestamp": -1}},
+        {"$group": {
+            "_id": "$user_id",
+            "latitude": {"$first": "$latitude"},
+            "longitude": {"$first": "$longitude"},
+            "timestamp": {"$first": "$timestamp"}
+        }}
+    ])
+    locations = await locations_cursor.to_list(100)
+    location_dict = {loc["_id"]: loc for loc in locations}
+    
     result = []
     for conn in connections:
         other_user_id = conn["target_id"] if conn["requester_id"] == user_id else conn["requester_id"]
-        other_user = await db.users.find_one({"_id": other_user_id})
+        other_user = user_dict.get(other_user_id)
         
-        # Get latest location
-        location = await db.locations.find_one(
-            {"user_id": other_user_id},
-            sort=[("timestamp", -1)]
-        )
-        
-        result.append({
-            "id": conn["_id"],
-            "user": {
-                "id": other_user["_id"],
-                "name": other_user["name"],
-                "phone_number": other_user["phone_number"]
-            },
-            "location": {
-                "latitude": location["latitude"],
-                "longitude": location["longitude"],
-                "timestamp": location["timestamp"]
-            } if location else None
-        })
+        if other_user:
+            location_data = location_dict.get(other_user_id)
+            result.append({
+                "id": conn["_id"],
+                "user": {
+                    "id": other_user["_id"],
+                    "name": other_user["name"],
+                    "phone_number": other_user["phone_number"]
+                },
+                "location": {
+                    "latitude": location_data["latitude"],
+                    "longitude": location_data["longitude"],
+                    "timestamp": location_data["timestamp"]
+                } if location_data else None
+            })
     
     return result
 
@@ -512,6 +552,9 @@ async def get_sos_alerts(user_id: str = Depends(get_current_user)):
         other_user_id = conn["target_id"] if conn["requester_id"] == user_id else conn["requester_id"]
         connected_user_ids.append(other_user_id)
     
+    if not connected_user_ids:
+        return []
+    
     # Get SOS alerts from connected users (last 24 hours)
     one_day_ago = datetime.utcnow() - timedelta(days=1)
     sos_alerts = await db.sos_alerts.find({
@@ -519,22 +562,34 @@ async def get_sos_alerts(user_id: str = Depends(get_current_user)):
         "created_at": {"$gte": one_day_ago}
     }).sort("created_at", -1).to_list(100)
     
+    if not sos_alerts:
+        return []
+    
+    # Batch fetch all unique user IDs
+    unique_user_ids = list(set(alert["user_id"] for alert in sos_alerts))
+    users = await db.users.find(
+        {"_id": {"$in": unique_user_ids}},
+        {"_id": 1, "name": 1, "phone_number": 1}
+    ).to_list(100)
+    user_dict = {user["_id"]: user for user in users}
+    
     result = []
     for alert in sos_alerts:
-        alert_user = await db.users.find_one({"_id": alert["user_id"]})
-        result.append({
-            "id": alert["_id"],
-            "user": {
-                "id": alert_user["_id"],
-                "name": alert_user["name"],
-                "phone_number": alert_user["phone_number"]
-            },
-            "latitude": alert["latitude"],
-            "longitude": alert["longitude"],
-            "message": alert["message"],
-            "created_at": alert["created_at"],
-            "acknowledged": alert["acknowledged"]
-        })
+        alert_user = user_dict.get(alert["user_id"])
+        if alert_user:
+            result.append({
+                "id": alert["_id"],
+                "user": {
+                    "id": alert_user["_id"],
+                    "name": alert_user["name"],
+                    "phone_number": alert_user["phone_number"]
+                },
+                "latitude": alert["latitude"],
+                "longitude": alert["longitude"],
+                "message": alert["message"],
+                "created_at": alert["created_at"],
+                "acknowledged": alert["acknowledged"]
+            })
     
     return result
 
