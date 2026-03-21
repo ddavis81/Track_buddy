@@ -15,18 +15,7 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-
-// Conditionally import MapView only for native platforms
-let MapView: any = null;
-let Marker: any = null;
-let PROVIDER_GOOGLE: any = null;
-
-if (Platform.OS !== 'web') {
-  const MapModule = require('react-native-maps');
-  MapView = MapModule.default;
-  Marker = MapModule.Marker;
-  PROVIDER_GOOGLE = MapModule.PROVIDER_GOOGLE;
-}
+import { MapView, Marker, PROVIDER_GOOGLE, isMapAvailable } from '../../components/MapView';
 
 const BACKEND_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -193,7 +182,7 @@ export default function MapScreen() {
   }
 
   // Web fallback - show location info instead of map
-  if (Platform.OS === 'web' || !MapView) {
+  if (!isMapAvailable) {
     return (
       <View style={styles.container}>
         <SafeAreaView style={styles.topBar}>
