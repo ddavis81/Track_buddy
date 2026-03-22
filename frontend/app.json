@@ -53,6 +53,9 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "EXPO_PUBLIC_BACKEND_URL": "https://phone-trace-6.preview.emergentagent.com"
     }
   }
 }
