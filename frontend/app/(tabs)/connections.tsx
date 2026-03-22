@@ -31,6 +31,10 @@ interface Connection {
     latitude: number;
     longitude: number;
     timestamp: string;
+    address?: string;
+    street?: string;
+    city?: string;
+    country?: string;
   } | null;
 }
 
@@ -145,9 +149,17 @@ export default function ConnectionsScreen() {
         <Text style={styles.connectionName}>{item.user.name}</Text>
         <Text style={styles.connectionPhone}>{item.user.phone_number}</Text>
         {item.location && (
-          <Text style={styles.locationText}>
-            Last seen: {new Date(item.location.timestamp).toLocaleString()}
-          </Text>
+          <>
+            {item.location.street && (
+              <Text style={styles.addressText}>
+                📍 {item.location.street}
+                {item.location.city && `, ${item.location.city}`}
+              </Text>
+            )}
+            <Text style={styles.locationText}>
+              Last seen: {new Date(item.location.timestamp).toLocaleString()}
+            </Text>
+          </>
         )}
       </View>
       <View style={styles.connectionActions}>
@@ -379,6 +391,11 @@ const styles = StyleSheet.create({
   connectionPhone: {
     fontSize: 14,
     color: '#999',
+    marginBottom: 4,
+  },
+  addressText: {
+    fontSize: 13,
+    color: '#007AFF',
     marginBottom: 4,
   },
   locationText: {

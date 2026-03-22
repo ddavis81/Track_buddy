@@ -123,9 +123,43 @@ export default function MapScreen() {
 
   const updateLocationOnServer = async (latitude: number, longitude: number) => {
     try {
+      // Perform reverse geocoding to get address
+      let addressData = {};
+      try {
+        const geocode = await Location.reverseGeocodeAsync({
+          latitude,
+          longitude,
+        });
+        
+        if (geocode && geocode.length > 0) {
+          const address = geocode[0];
+          const fullAddress = [
+            address.streetNumber,
+            address.street,
+            address.district,
+            address.city,
+            address.region,
+            address.country
+          ].filter(Boolean).join(', ');
+          
+          addressData = {
+            address: fullAddress,
+            street: address.street || address.name || null,
+            city: address.city || address.district || null,
+            country: address.country || null,
+          };
+        }
+      } catch (geocodeError) {
+        console.log('Reverse geocoding failed, continuing without address:', geocodeError);
+      }
+
       await axios.post(
         `${BACKEND_URL}/api/locations`,
-        { latitude, longitude },
+        { 
+          latitude, 
+          longitude,
+          ...addressData
+        },
         {
           headers: {
             Authorization: `Bearer ${token}`,

@@ -70,6 +70,10 @@ class LocationUpdate(BaseModel):
     latitude: float
     longitude: float
     timestamp: Optional[datetime] = None
+    address: Optional[str] = None
+    street: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
 
 class Location(BaseModel):
     id: str
@@ -77,6 +81,10 @@ class Location(BaseModel):
     latitude: float
     longitude: float
     timestamp: datetime
+    address: Optional[str] = None
+    street: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
 
 class ConnectionRequest(BaseModel):
     target_phone: str
@@ -208,7 +216,11 @@ async def update_location(location: LocationUpdate, user_id: str = Depends(get_c
         "user_id": user_id,
         "latitude": location.latitude,
         "longitude": location.longitude,
-        "timestamp": location.timestamp or datetime.utcnow()
+        "timestamp": location.timestamp or datetime.utcnow(),
+        "address": location.address,
+        "street": location.street,
+        "city": location.city,
+        "country": location.country
     }
     
     await db.locations.insert_one(location_dict)
@@ -218,6 +230,10 @@ async def update_location(location: LocationUpdate, user_id: str = Depends(get_c
         "user_id": user_id,
         "latitude": location.latitude,
         "longitude": location.longitude,
+        "address": location.address,
+        "street": location.street,
+        "city": location.city,
+        "country": location.country,
         "timestamp": location_dict["timestamp"].isoformat()
     })
     
