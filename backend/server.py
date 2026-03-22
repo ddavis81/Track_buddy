@@ -512,7 +512,106 @@ class SOSRequest(BaseModel):
     longitude: float
     message: Optional[str] = None
 
+class PushToken(BaseModel):
+    expo_push_token: str
+
+@api_router.post("/push-token")
+async def register_push_token(token_data: PushToken, user_id: str = Depends(get_current_user)):
+    """Register user's Expo push notification token"""
+    await db.users.update_one(
+        {"_id": user_id},
+        {"$set": {"expo_push_token": token_data.expo_push_token}}
+    )
+    return {"message": "Push token registered successfully"}
+
 @api_router.post("/sos")
+async def send_sos_alert(sos_request: SOSRequest, user_id: str = Depends(get_current_user)):
+    # Get user info
+    user = await db.users.find_one({"_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Create SOS alert
+    sos_dict = {
+        "_id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "latitude": sos_request.latitude,
+        "longitude": sos_request.longitude,
+        "message": sos_request.message or "Emergency! Need help!",
+        "created_at": datetime.utcnow(),
+        "acknowledged": False
+    }
+    
+    await db.sos_alerts.insert_one(sos_dict)
+    
+    # Get all connected users
+    connections = await db.connections.find({
+        "$or": [
+            {"requester_id": user_id, "status": "accepted"},
+            {"target_id": user_id, "status": "accepted"}
+        ]
+    }).to_list(100)
+    
+    # Collect push tokens and send notifications
+    push_tokens = []
+    for conn in connections:
+        other_user_id = conn["target_id"] if conn["requester_id"] == user_id else conn["requester_id"]
+        other_user = await db.users.find_one({"_id": other_user_id})
+        
+        # Emit Socket.IO event
+        await sio.emit('sos_alert', {
+            "alert_id": sos_dict["_id"],
+            "user_id": user_id,
+            "user_name": user["name"],
+            "user_phone": user["phone_number"],
+            "latitude": sos_dict["latitude"],
+            "longitude": sos_dict["longitude"],
+            "message": sos_dict["message"],
+            "created_at": sos_dict["created_at"].isoformat()
+        }, room=other_user_id)
+        
+        # Collect push tokens for Expo notifications
+        if other_user and "expo_push_token" in other_user:
+            push_tokens.append({
+                "to": other_user["expo_push_token"],
+                "sound": "default",
+                "title": f"🚨 EMERGENCY: {user['name']}",
+                "body": sos_dict["message"],
+                "data": {
+                    "type": "sos_alert",
+                    "alert_id": sos_dict["_id"],
+                    "user_id": user_id,
+                    "user_name": user["name"],
+                    "latitude": sos_dict["latitude"],
+                    "longitude": sos_dict["longitude"]
+                },
+                "priority": "high",
+                "channelId": "emergency"
+            })
+    
+    # Send push notifications via Expo Push API
+    if push_tokens:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.post(
+                    'https://exp.host/--/api/v2/push/send',
+                    json=push_tokens,
+                    headers={'Accept': 'application/json', 'Content-Type': 'application/json'}
+                ) as response:
+                    if response.status != 200:
+                        logger.error(f"Failed to send push notifications: {await response.text()}")
+            except Exception as e:
+                logger.error(f"Error sending push notifications: {str(e)}")
+    
+    return {
+        "message": "SOS alert sent successfully",
+        "id": sos_dict["_id"],
+        "notified_users": len(connections),
+        "push_notifications_sent": len(push_tokens)
+    }
+
+@api_router.get("/sos")
 async def send_sos_alert(sos_request: SOSRequest, user_id: str = Depends(get_current_user)):
     # Get user info
     user = await db.users.find_one({"_id": user_id})
