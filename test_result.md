@@ -134,6 +134,12 @@ backend:
       - working: true
         agent: "testing"
         comment: "✅ All location endpoints working correctly. Location updates, retrieval, and history access all functioning. Authorization checks working properly - users can only access connected users' locations."
+      - working: false
+        agent: "testing"
+        comment: "❌ CRITICAL BUG FOUND: Address fields (address, street, city, country) were being stored correctly in POST /api/locations but NOT returned in GET endpoints. Fixed GET /api/locations/{user_id} and GET /api/locations/history/{user_id} to include address fields."
+      - working: true
+        agent: "testing"
+        comment: "✅ FIXED: All location endpoints now working correctly with address fields. Comprehensive testing completed: 1) POST location with address fields - ✅ WORKING, 2) GET location with address fields - ✅ WORKING, 3) Connection-based location access with address fields - ✅ WORKING, 4) Location history with address fields - ✅ WORKING, 5) POST/GET location without address fields - ✅ WORKING. All address field functionality verified and working correctly."
 
   - task: "Connection Management"
     implemented: true
@@ -258,3 +264,5 @@ agent_communication:
     message: "Completed initial MVP implementation of tracking app with authentication, location tracking, connections, alarms, and camera access. Backend uses FastAPI with Socket.IO for real-time updates. Frontend uses Expo with React Navigation. Ready for backend testing. Video/voice calls feature bypassed as per user request - will be added later with Agora when credentials are provided."
   - agent: "testing"
     message: "✅ Backend testing completed successfully! All 26 tests passed. Fixed one JWT error handling issue (jwt.JWTError -> jwt.InvalidTokenError). All authentication, location tracking, connection management, alarm system, and Socket.IO real-time features are working correctly. Backend API is fully functional and ready for production use."
+  - agent: "testing"
+    message: "✅ Location address fields testing completed successfully! Found and FIXED critical bug: Address fields (address, street, city, country) were being stored correctly but not returned in GET endpoints. Updated GET /api/locations/{user_id} and GET /api/locations/history/{user_id} to include address fields. All location functionality with address fields now working correctly: POST with address fields ✅, GET with address fields ✅, Connection-based access ✅, Location history ✅, Backward compatibility ✅."

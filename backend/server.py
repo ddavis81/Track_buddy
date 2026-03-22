@@ -266,7 +266,11 @@ async def get_user_location(target_user_id: str, user_id: str = Depends(get_curr
         "user_id": location["user_id"],
         "latitude": location["latitude"],
         "longitude": location["longitude"],
-        "timestamp": location["timestamp"]
+        "timestamp": location["timestamp"],
+        "address": location.get("address"),
+        "street": location.get("street"),
+        "city": location.get("city"),
+        "country": location.get("country")
     }
 
 @api_router.get("/locations/history/{target_user_id}")
@@ -296,7 +300,11 @@ async def get_location_history(
             "user_id": loc["user_id"],
             "latitude": loc["latitude"],
             "longitude": loc["longitude"],
-            "timestamp": loc["timestamp"]
+            "timestamp": loc["timestamp"],
+            "address": loc.get("address"),
+            "street": loc.get("street"),
+            "city": loc.get("city"),
+            "country": loc.get("country")
         }
         for loc in locations
     ]

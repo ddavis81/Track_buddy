@@ -1,438 +1,306 @@
 #!/usr/bin/env python3
-"""
-Backend API Testing for Tracking App
-Tests all backend endpoints with realistic data and comprehensive error handling.
-"""
 
 import requests
 import json
-from datetime import datetime, timedelta
-import time
+import sys
+from datetime import datetime
 
-# Backend URL from frontend environment
-BASE_URL = "https://phone-trace-6.preview.emergentagent.com/api"
+# Backend URL from frontend .env
+BACKEND_URL = "https://phone-trace-6.preview.emergentagent.com/api"
 
-class TrackingAppTester:
-    def __init__(self):
-        self.base_url = BASE_URL
-        self.user1_token = None
-        self.user2_token = None
-        self.user1_id = None
-        self.user2_id = None
-        self.connection_id = None
-        self.alarm_id = None
-        self.test_results = []
-        # Generate unique timestamp for this test run
-        import time
-        self.timestamp = str(int(time.time()))
-        
-    def log_test(self, test_name, success, details=""):
-        """Log test results"""
-        status = "✅ PASS" if success else "❌ FAIL"
-        self.test_results.append({
-            "test": test_name,
-            "status": status,
-            "details": details
-        })
-        print(f"{status}: {test_name}")
-        if details:
-            print(f"   Details: {details}")
+def test_location_address_fields():
+    """Test the updated location endpoint with street name/address fields"""
     
-    def make_request(self, method, endpoint, data=None, headers=None, expected_status=200):
-        """Make HTTP request with error handling"""
-        url = f"{self.base_url}{endpoint}"
-        try:
-            if method.upper() == "GET":
-                response = requests.get(url, headers=headers, timeout=10)
-            elif method.upper() == "POST":
-                response = requests.post(url, json=data, headers=headers, timeout=10)
-            elif method.upper() == "DELETE":
-                response = requests.delete(url, headers=headers, timeout=10)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
+    print("🧪 Testing Location Address Fields Functionality")
+    print("=" * 60)
+    
+    # Test data with unique phone numbers
+    import time
+    timestamp = str(int(time.time()))
+    test_user1 = {
+        "phone_number": f"+123456{timestamp}1",
+        "password": "testpass123",
+        "name": "Test User 1"
+    }
+    
+    test_user2 = {
+        "phone_number": f"+123456{timestamp}2", 
+        "password": "testpass123",
+        "name": "Test User 2"
+    }
+    
+    test_location = {
+        "latitude": 37.7749,
+        "longitude": -122.4194,
+        "address": "123 Market Street",
+        "street": "Market Street", 
+        "city": "San Francisco",
+        "country": "USA"
+    }
+    
+    try:
+        # Step 1: Register first user
+        print("\n1️⃣ Registering first user...")
+        response = requests.post(f"{BACKEND_URL}/auth/register", json=test_user1)
+        if response.status_code != 200:
+            print(f"❌ Registration failed: {response.status_code} - {response.text}")
+            return False
+        
+        user1_data = response.json()
+        user1_token = user1_data["access_token"]
+        user1_id = user1_data["user"]["id"]
+        print(f"✅ User 1 registered successfully: {user1_id}")
+        
+        # Step 2: Register second user for connection testing
+        print("\n2️⃣ Registering second user...")
+        response = requests.post(f"{BACKEND_URL}/auth/register", json=test_user2)
+        if response.status_code != 200:
+            print(f"❌ Registration failed: {response.status_code} - {response.text}")
+            return False
             
-            if response.status_code != expected_status:
-                return False, f"Expected {expected_status}, got {response.status_code}. Response: {response.text}"
+        user2_data = response.json()
+        user2_token = user2_data["access_token"]
+        user2_id = user2_data["user"]["id"]
+        print(f"✅ User 2 registered successfully: {user2_id}")
+        
+        # Step 3: Test login for user 1
+        print("\n3️⃣ Testing login...")
+        login_data = {"phone_number": test_user1["phone_number"], "password": test_user1["password"]}
+        response = requests.post(f"{BACKEND_URL}/auth/login", json=login_data)
+        if response.status_code != 200:
+            print(f"❌ Login failed: {response.status_code} - {response.text}")
+            return False
+        
+        login_response = response.json()
+        token = login_response["access_token"]
+        print(f"✅ Login successful, token received")
+        
+        # Step 4: POST location with address fields
+        print("\n4️⃣ Posting location with address fields...")
+        headers = {"Authorization": f"Bearer {token}"}
+        response = requests.post(f"{BACKEND_URL}/locations", json=test_location, headers=headers)
+        if response.status_code != 200:
+            print(f"❌ Location update failed: {response.status_code} - {response.text}")
+            return False
+        
+        location_response = response.json()
+        location_id = location_response["id"]
+        print(f"✅ Location posted successfully: {location_id}")
+        print(f"   📍 Coordinates: {test_location['latitude']}, {test_location['longitude']}")
+        print(f"   🏠 Address: {test_location['address']}")
+        print(f"   🛣️  Street: {test_location['street']}")
+        print(f"   🏙️  City: {test_location['city']}")
+        print(f"   🌍 Country: {test_location['country']}")
+        
+        # Step 5: GET location back and verify address fields
+        print("\n5️⃣ Getting location back to verify address fields...")
+        response = requests.get(f"{BACKEND_URL}/locations/{user1_id}", headers=headers)
+        if response.status_code != 200:
+            print(f"❌ Get location failed: {response.status_code} - {response.text}")
+            return False
+        
+        retrieved_location = response.json()
+        print(f"✅ Location retrieved successfully")
+        print(f"   Retrieved data: {json.dumps(retrieved_location, indent=2)}")
+        
+        # Check if address fields are present
+        address_fields = ["address", "street", "city", "country"]
+        missing_fields = []
+        for field in address_fields:
+            if field not in retrieved_location:
+                missing_fields.append(field)
+        
+        if missing_fields:
+            print(f"❌ CRITICAL BUG: Address fields missing from GET response: {missing_fields}")
+            print(f"   Expected fields: {address_fields}")
+            print(f"   Actual fields: {list(retrieved_location.keys())}")
+            return False
+        
+        # Verify address field values
+        for field in address_fields:
+            expected_value = test_location[field]
+            actual_value = retrieved_location.get(field)
+            if actual_value != expected_value:
+                print(f"❌ Address field mismatch for '{field}': expected '{expected_value}', got '{actual_value}'")
+                return False
+        
+        print(f"✅ All address fields verified correctly")
+        
+        # Step 6: Test connection between users and verify address data visibility
+        print("\n6️⃣ Testing connection and address data visibility...")
+        
+        # Send connection request from user2 to user1
+        connection_request = {"target_phone": test_user1["phone_number"]}
+        headers2 = {"Authorization": f"Bearer {user2_token}"}
+        response = requests.post(f"{BACKEND_URL}/connections/request", json=connection_request, headers=headers2)
+        if response.status_code != 200:
+            print(f"❌ Connection request failed: {response.status_code} - {response.text}")
+            return False
+        
+        print(f"✅ Connection request sent from user2 to user1")
+        
+        # Get pending requests for user1
+        response = requests.get(f"{BACKEND_URL}/connections/pending", headers=headers)
+        if response.status_code != 200:
+            print(f"❌ Get pending requests failed: {response.status_code} - {response.text}")
+            return False
+        
+        pending_requests = response.json()
+        if not pending_requests:
+            print(f"❌ No pending requests found")
+            return False
+        
+        connection_id = pending_requests[0]["id"]
+        print(f"✅ Pending request found: {connection_id}")
+        
+        # Accept connection request
+        response = requests.post(f"{BACKEND_URL}/connections/{connection_id}/accept", headers=headers)
+        if response.status_code != 200:
+            print(f"❌ Accept connection failed: {response.status_code} - {response.text}")
+            return False
+        
+        print(f"✅ Connection accepted")
+        
+        # Now user2 should be able to see user1's location with address data
+        response = requests.get(f"{BACKEND_URL}/locations/{user1_id}", headers=headers2)
+        if response.status_code != 200:
+            print(f"❌ User2 cannot access user1's location: {response.status_code} - {response.text}")
+            return False
+        
+        connected_user_location = response.json()
+        print(f"✅ User2 can access user1's location")
+        print(f"   Retrieved data: {json.dumps(connected_user_location, indent=2)}")
+        
+        # Check if address fields are present for connected user
+        missing_fields_connected = []
+        for field in address_fields:
+            if field not in connected_user_location:
+                missing_fields_connected.append(field)
+        
+        if missing_fields_connected:
+            print(f"❌ CRITICAL BUG: Address fields missing from connected user's location: {missing_fields_connected}")
+            return False
+        
+        print(f"✅ Connected user can see all address fields")
+        
+        # Step 7: Test location history endpoint
+        print("\n7️⃣ Testing location history with address fields...")
+        response = requests.get(f"{BACKEND_URL}/locations/history/{user1_id}", headers=headers2)
+        if response.status_code != 200:
+            print(f"❌ Get location history failed: {response.status_code} - {response.text}")
+            return False
+        
+        location_history = response.json()
+        print(f"✅ Location history retrieved: {len(location_history)} entries")
+        
+        if location_history:
+            first_location = location_history[0]
+            print(f"   First location: {json.dumps(first_location, indent=2)}")
             
-            try:
-                return True, response.json()
-            except:
-                return True, response.text
-                
-        except requests.exceptions.RequestException as e:
-            return False, f"Request failed: {str(e)}"
-    
-    def test_user_registration(self):
-        """Test user registration endpoint"""
-        print("\n=== Testing User Registration ===")
+            # Check if address fields are present in history
+            missing_fields_history = []
+            for field in address_fields:
+                if field not in first_location:
+                    missing_fields_history.append(field)
+            
+            if missing_fields_history:
+                print(f"❌ CRITICAL BUG: Address fields missing from location history: {missing_fields_history}")
+                return False
+            
+            print(f"✅ Location history includes all address fields")
         
-        # Test User 1 Registration
-        user1_data = {
-            "phone_number": f"+123456{self.timestamp[-4:]}",
-            "password": "securepass123",
-            "name": "Alice Johnson"
-        }
-        
-        success, response = self.make_request("POST", "/auth/register", user1_data, expected_status=200)
-        if success and isinstance(response, dict) and "access_token" in response:
-            self.user1_token = response["access_token"]
-            self.user1_id = response["user"]["id"]
-            self.log_test("User 1 Registration", True, f"User ID: {self.user1_id}")
-        else:
-            self.log_test("User 1 Registration", False, str(response))
-            return False
-        
-        # Test User 2 Registration
-        user2_data = {
-            "phone_number": f"+198765{self.timestamp[-4:]}",
-            "password": "mypassword456",
-            "name": "Bob Smith"
-        }
-        
-        success, response = self.make_request("POST", "/auth/register", user2_data, expected_status=200)
-        if success and isinstance(response, dict) and "access_token" in response:
-            self.user2_token = response["access_token"]
-            self.user2_id = response["user"]["id"]
-            self.log_test("User 2 Registration", True, f"User ID: {self.user2_id}")
-        else:
-            self.log_test("User 2 Registration", False, str(response))
-            return False
-        
-        # Test duplicate registration (should fail)
-        success, response = self.make_request("POST", "/auth/register", user1_data, expected_status=400)
-        if success:
-            self.log_test("Duplicate Registration Prevention", True, "Correctly rejected duplicate phone number")
-        else:
-            self.log_test("Duplicate Registration Prevention", False, str(response))
-        
+        print("\n🎉 All tests passed successfully!")
         return True
+        
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network error: {e}")
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        return False
+
+def test_location_without_address_fields():
+    """Test that location endpoint still works without optional address fields"""
     
-    def test_user_login(self):
-        """Test user login endpoint"""
-        print("\n=== Testing User Login ===")
-        
-        # Test valid login
-        login_data = {
-            "phone_number": f"+123456{self.timestamp[-4:]}",
-            "password": "securepass123"
-        }
-        
-        success, response = self.make_request("POST", "/auth/login", login_data, expected_status=200)
-        if success and isinstance(response, dict) and "access_token" in response:
-            self.log_test("Valid Login", True, "Login successful")
-        else:
-            self.log_test("Valid Login", False, str(response))
+    print("\n🧪 Testing Location Without Address Fields")
+    print("=" * 50)
+    
+    import time
+    timestamp = str(int(time.time()))
+    test_user = {
+        "phone_number": f"+123456{timestamp}3",
+        "password": "testpass123", 
+        "name": "Test User 3"
+    }
+    
+    basic_location = {
+        "latitude": 40.7128,
+        "longitude": -74.0060
+    }
+    
+    try:
+        # Register user
+        print("\n1️⃣ Registering user...")
+        response = requests.post(f"{BACKEND_URL}/auth/register", json=test_user)
+        if response.status_code != 200:
+            print(f"❌ Registration failed: {response.status_code} - {response.text}")
             return False
         
-        # Test invalid password
-        invalid_login = {
-            "phone_number": f"+123456{self.timestamp[-4:]}",
-            "password": "wrongpassword"
-        }
+        user_data = response.json()
+        token = user_data["access_token"]
+        user_id = user_data["user"]["id"]
+        print(f"✅ User registered successfully: {user_id}")
         
-        success, response = self.make_request("POST", "/auth/login", invalid_login, expected_status=401)
-        if success:
-            self.log_test("Invalid Password Rejection", True, "Correctly rejected invalid password")
-        else:
-            self.log_test("Invalid Password Rejection", False, str(response))
+        # Post location without address fields
+        print("\n2️⃣ Posting location without address fields...")
+        headers = {"Authorization": f"Bearer {token}"}
+        response = requests.post(f"{BACKEND_URL}/locations", json=basic_location, headers=headers)
+        if response.status_code != 200:
+            print(f"❌ Location update failed: {response.status_code} - {response.text}")
+            return False
         
-        # Test non-existent user
-        nonexistent_login = {
-            "phone_number": "+9999999999",
-            "password": "anypassword"
-        }
+        print(f"✅ Location posted successfully without address fields")
         
-        success, response = self.make_request("POST", "/auth/login", nonexistent_login, expected_status=401)
-        if success:
-            self.log_test("Non-existent User Rejection", True, "Correctly rejected non-existent user")
-        else:
-            self.log_test("Non-existent User Rejection", False, str(response))
+        # Get location back
+        response = requests.get(f"{BACKEND_URL}/locations/{user_id}", headers=headers)
+        if response.status_code != 200:
+            print(f"❌ Get location failed: {response.status_code} - {response.text}")
+            return False
         
+        retrieved_location = response.json()
+        print(f"✅ Location retrieved successfully")
+        print(f"   Retrieved data: {json.dumps(retrieved_location, indent=2)}")
+        
+        # Verify coordinates are correct
+        if (retrieved_location.get("latitude") != basic_location["latitude"] or 
+            retrieved_location.get("longitude") != basic_location["longitude"]):
+            print(f"❌ Coordinate mismatch")
+            return False
+        
+        print(f"✅ Coordinates verified correctly")
         return True
-    
-    def test_get_current_user(self):
-        """Test get current user endpoint"""
-        print("\n=== Testing Get Current User ===")
         
-        # Test with valid token
-        headers = {"Authorization": f"Bearer {self.user1_token}"}
-        success, response = self.make_request("GET", "/auth/me", headers=headers, expected_status=200)
-        if success and isinstance(response, dict) and response.get("id") == self.user1_id:
-            self.log_test("Get Current User (Valid Token)", True, f"Retrieved user: {response.get('name')}")
-        else:
-            self.log_test("Get Current User (Valid Token)", False, str(response))
-            return False
-        
-        # Test with invalid token
-        headers = {"Authorization": "Bearer invalid_token"}
-        success, response = self.make_request("GET", "/auth/me", headers=headers, expected_status=401)
-        if success:
-            self.log_test("Get Current User (Invalid Token)", True, "Correctly rejected invalid token")
-        else:
-            self.log_test("Get Current User (Invalid Token)", False, str(response))
-        
-        # Test without token
-        success, response = self.make_request("GET", "/auth/me", expected_status=403)
-        if success:
-            self.log_test("Get Current User (No Token)", True, "Correctly rejected missing token")
-        else:
-            self.log_test("Get Current User (No Token)", False, str(response))
-        
-        return True
-    
-    def test_location_updates(self):
-        """Test location update and retrieval endpoints"""
-        print("\n=== Testing Location Updates ===")
-        
-        # Update User 1 location
-        headers = {"Authorization": f"Bearer {self.user1_token}"}
-        location_data = {
-            "latitude": 37.7749,
-            "longitude": -122.4194
-        }
-        
-        success, response = self.make_request("POST", "/locations", location_data, headers, expected_status=200)
-        if success and isinstance(response, dict) and "id" in response:
-            self.log_test("User 1 Location Update", True, "Location updated successfully")
-        else:
-            self.log_test("User 1 Location Update", False, str(response))
-            return False
-        
-        # Update User 2 location
-        headers = {"Authorization": f"Bearer {self.user2_token}"}
-        location_data = {
-            "latitude": 40.7128,
-            "longitude": -74.0060
-        }
-        
-        success, response = self.make_request("POST", "/locations", location_data, headers, expected_status=200)
-        if success and isinstance(response, dict) and "id" in response:
-            self.log_test("User 2 Location Update", True, "Location updated successfully")
-        else:
-            self.log_test("User 2 Location Update", False, str(response))
-            return False
-        
-        # Test unauthorized location update
-        success, response = self.make_request("POST", "/locations", location_data, expected_status=403)
-        if success:
-            self.log_test("Unauthorized Location Update", True, "Correctly rejected unauthorized request")
-        else:
-            self.log_test("Unauthorized Location Update", False, str(response))
-        
-        return True
-    
-    def test_connection_management(self):
-        """Test connection request, accept, and listing"""
-        print("\n=== Testing Connection Management ===")
-        
-        # User 1 sends connection request to User 2
-        headers = {"Authorization": f"Bearer {self.user1_token}"}
-        request_data = {
-            "target_phone": f"+198765{self.timestamp[-4:]}"
-        }
-        
-        success, response = self.make_request("POST", "/connections/request", request_data, headers, expected_status=200)
-        if success and isinstance(response, dict) and "id" in response:
-            self.connection_id = response["id"]
-            self.log_test("Send Connection Request", True, f"Request ID: {self.connection_id}")
-        else:
-            self.log_test("Send Connection Request", False, str(response))
-            return False
-        
-        # Test duplicate connection request (should fail)
-        success, response = self.make_request("POST", "/connections/request", request_data, headers, expected_status=400)
-        if success:
-            self.log_test("Duplicate Connection Request Prevention", True, "Correctly rejected duplicate request")
-        else:
-            self.log_test("Duplicate Connection Request Prevention", False, str(response))
-        
-        # User 2 checks pending requests
-        headers = {"Authorization": f"Bearer {self.user2_token}"}
-        success, response = self.make_request("GET", "/connections/pending", headers=headers, expected_status=200)
-        if success and isinstance(response, list) and len(response) > 0:
-            self.log_test("Get Pending Requests", True, f"Found {len(response)} pending request(s)")
-        else:
-            self.log_test("Get Pending Requests", False, str(response))
-            return False
-        
-        # User 2 accepts the connection
-        success, response = self.make_request("POST", f"/connections/{self.connection_id}/accept", headers=headers, expected_status=200)
-        if success:
-            self.log_test("Accept Connection", True, "Connection accepted successfully")
-        else:
-            self.log_test("Accept Connection", False, str(response))
-            return False
-        
-        # Test unauthorized connection acceptance
-        headers = {"Authorization": f"Bearer {self.user1_token}"}
-        success, response = self.make_request("POST", f"/connections/{self.connection_id}/accept", headers=headers, expected_status=404)
-        if success:
-            self.log_test("Unauthorized Connection Accept", True, "Correctly rejected unauthorized accept")
-        else:
-            self.log_test("Unauthorized Connection Accept", False, str(response))
-        
-        return True
-    
-    def test_location_access(self):
-        """Test location access between connected users"""
-        print("\n=== Testing Location Access ===")
-        
-        # User 1 should be able to access User 2's location (they are connected)
-        headers = {"Authorization": f"Bearer {self.user1_token}"}
-        success, response = self.make_request("GET", f"/locations/{self.user2_id}", headers=headers, expected_status=200)
-        if success and isinstance(response, dict) and "latitude" in response:
-            self.log_test("Connected User Location Access", True, f"Retrieved location: {response['latitude']}, {response['longitude']}")
-        else:
-            self.log_test("Connected User Location Access", False, str(response))
-            return False
-        
-        # Test location history access
-        success, response = self.make_request("GET", f"/locations/history/{self.user2_id}", headers=headers, expected_status=200)
-        if success and isinstance(response, list):
-            self.log_test("Location History Access", True, f"Retrieved {len(response)} location records")
-        else:
-            self.log_test("Location History Access", False, str(response))
-            return False
-        
-        # Test own location access
-        success, response = self.make_request("GET", f"/locations/{self.user1_id}", headers=headers, expected_status=200)
-        if success and isinstance(response, dict) and "latitude" in response:
-            self.log_test("Own Location Access", True, "Successfully retrieved own location")
-        else:
-            self.log_test("Own Location Access", False, str(response))
-        
-        return True
-    
-    def test_connection_listing(self):
-        """Test listing all connections"""
-        print("\n=== Testing Connection Listing ===")
-        
-        # User 1 lists connections
-        headers = {"Authorization": f"Bearer {self.user1_token}"}
-        success, response = self.make_request("GET", "/connections", headers=headers, expected_status=200)
-        if success and isinstance(response, list) and len(response) > 0:
-            connection = response[0]
-            if "user" in connection and "location" in connection:
-                self.log_test("List Connections", True, f"Found {len(response)} connection(s) with location data")
-            else:
-                self.log_test("List Connections", False, "Connection data missing user or location info")
-        else:
-            self.log_test("List Connections", False, str(response))
-            return False
-        
-        return True
-    
-    def test_alarm_management(self):
-        """Test alarm creation, listing, and deletion"""
-        print("\n=== Testing Alarm Management ===")
-        
-        # Create alarm
-        headers = {"Authorization": f"Bearer {self.user1_token}"}
-        future_time = datetime.utcnow() + timedelta(hours=1)
-        alarm_data = {
-            "title": "Important Meeting",
-            "message": "Don't forget the quarterly review meeting",
-            "trigger_time": future_time.isoformat()
-        }
-        
-        success, response = self.make_request("POST", "/alarms", alarm_data, headers, expected_status=200)
-        if success and isinstance(response, dict) and "id" in response:
-            self.alarm_id = response["id"]
-            self.log_test("Create Alarm", True, f"Alarm ID: {self.alarm_id}")
-        else:
-            self.log_test("Create Alarm", False, str(response))
-            return False
-        
-        # List alarms
-        success, response = self.make_request("GET", "/alarms", headers=headers, expected_status=200)
-        if success and isinstance(response, list) and len(response) > 0:
-            alarm = response[0]
-            if alarm.get("title") == "Important Meeting":
-                self.log_test("List Alarms", True, f"Found {len(response)} alarm(s)")
-            else:
-                self.log_test("List Alarms", False, "Alarm data doesn't match created alarm")
-        else:
-            self.log_test("List Alarms", False, str(response))
-            return False
-        
-        # Delete alarm
-        success, response = self.make_request("DELETE", f"/alarms/{self.alarm_id}", headers=headers, expected_status=200)
-        if success:
-            self.log_test("Delete Alarm", True, "Alarm deleted successfully")
-        else:
-            self.log_test("Delete Alarm", False, str(response))
-            return False
-        
-        # Verify alarm is deleted
-        success, response = self.make_request("GET", "/alarms", headers=headers, expected_status=200)
-        if success and isinstance(response, list) and len(response) == 0:
-            self.log_test("Verify Alarm Deletion", True, "Alarm list is empty after deletion")
-        else:
-            self.log_test("Verify Alarm Deletion", False, f"Expected empty list, got: {response}")
-        
-        # Test unauthorized alarm deletion
-        success, response = self.make_request("DELETE", f"/alarms/nonexistent_id", headers=headers, expected_status=404)
-        if success:
-            self.log_test("Unauthorized Alarm Deletion", True, "Correctly rejected non-existent alarm deletion")
-        else:
-            self.log_test("Unauthorized Alarm Deletion", False, str(response))
-        
-        return True
-    
-    def run_all_tests(self):
-        """Run all backend tests in sequence"""
-        print("🚀 Starting Backend API Tests for Tracking App")
-        print(f"Testing against: {self.base_url}")
-        print("=" * 60)
-        
-        # Run tests in order
-        tests = [
-            self.test_user_registration,
-            self.test_user_login,
-            self.test_get_current_user,
-            self.test_location_updates,
-            self.test_connection_management,
-            self.test_location_access,
-            self.test_connection_listing,
-            self.test_alarm_management
-        ]
-        
-        all_passed = True
-        for test in tests:
-            try:
-                result = test()
-                if not result:
-                    all_passed = False
-            except Exception as e:
-                self.log_test(test.__name__, False, f"Test crashed: {str(e)}")
-                all_passed = False
-        
-        # Print summary
-        print("\n" + "=" * 60)
-        print("📊 TEST SUMMARY")
-        print("=" * 60)
-        
-        passed = sum(1 for result in self.test_results if "✅" in result["status"])
-        failed = sum(1 for result in self.test_results if "❌" in result["status"])
-        
-        print(f"Total Tests: {len(self.test_results)}")
-        print(f"Passed: {passed}")
-        print(f"Failed: {failed}")
-        
-        if failed > 0:
-            print("\n❌ FAILED TESTS:")
-            for result in self.test_results:
-                if "❌" in result["status"]:
-                    print(f"  - {result['test']}: {result['details']}")
-        
-        if all_passed:
-            print("\n🎉 ALL TESTS PASSED! Backend API is working correctly.")
-        else:
-            print(f"\n⚠️  {failed} test(s) failed. Please check the issues above.")
-        
-        return all_passed
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return False
 
 if __name__ == "__main__":
-    tester = TrackingAppTester()
-    success = tester.run_all_tests()
-    exit(0 if success else 1)
+    print("🚀 Starting Location Address Fields Testing")
+    print(f"Backend URL: {BACKEND_URL}")
+    
+    # Run tests
+    test1_passed = test_location_address_fields()
+    test2_passed = test_location_without_address_fields()
+    
+    print("\n" + "=" * 60)
+    print("📊 TEST SUMMARY")
+    print("=" * 60)
+    print(f"✅ Location with address fields: {'PASSED' if test1_passed else 'FAILED'}")
+    print(f"✅ Location without address fields: {'PASSED' if test2_passed else 'FAILED'}")
+    
+    if test1_passed and test2_passed:
+        print("\n🎉 ALL TESTS PASSED!")
+        sys.exit(0)
+    else:
+        print("\n❌ SOME TESTS FAILED!")
+        sys.exit(1)
